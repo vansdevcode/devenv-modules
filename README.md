@@ -1,27 +1,25 @@
-# devenv extensions
+# devenv modules
 
-This repository exposes reusable devenv modules. Import the repository once,
-then enable the modules needed by each project.
+Add this repository to a devenv project, then configure the modules you need.
 
 ```yaml
 # devenv.yaml
 inputs:
-  devenv-extensions:
-    url: github:your-org/devenv-extensions
+  devenv-modules:
+    url: github:vansdevcode/devenv-modules
     flake: false
 
 imports:
-  - devenv-extensions
+  - devenv-modules
 ```
 
 ## Shared proxy
 
-`services.sharedProxy` runs one Caddy instance per user. Enabled devenv
-processes atomically add a project Caddyfile under the shared state directory;
-the root Caddyfile imports every project file. When a project starts or stops,
-the singleton starts, reloads, or stops Caddy as appropriate.
+Use `services.sharedProxy` to serve a local development application over HTTPS.
+Configure a hostname and the Caddy directives that handle requests for it:
 
 ```nix
+# devenv.nix
 services.sharedProxy = {
   enable = true;
   virtualHosts."app.localhost" = {
@@ -33,23 +31,30 @@ services.sharedProxy = {
 };
 ```
 
-The virtual-host names are passed to Caddy unchanged; they are not limited to
-`.localhost`. The singleton uses Caddy's internal CA, so it can issue local
-certificates for every configured hostname. It owns ports 80 and 443, so a
-project-local web server must use another port or socket.
+Start your devenv environment, then open
+[`https://app.localhost`](https://app.localhost). `serverAliases` lets the
+same virtual host respond to additional names. `extraConfig` accepts Caddyfile
+directives, so it can proxy to a local server, serve static files, or use other
+Caddy handlers.
 
-Persistent Caddy state defaults to
-`$XDG_STATE_HOME/devenv-shared-caddy`, falling back to
-`~/.local/state/devenv-shared-caddy`. Project files live in its `sites/`
-directory; runtime files, including the admin Unix socket, use
-`$XDG_RUNTIME_DIR` or a short temporary-directory fallback.
+Hostnames are passed to Caddy unchanged; they do not need a `.localhost`
+suffix. The proxy uses Caddy's local CA for certificates. It uses ports 80 and
+443, so configure the application server on another port or a Unix socket.
+
+To store the proxy's persistent data in a specific location, set
+`stateDirectory` to an absolute path:
+
+```nix
+services.sharedProxy.stateDirectory = "/path/to/caddy-state";
+```
 
 ## Laravel
 
-`services.laravel` is a Laravel-focused module that expands simple site
-definitions into shared-proxy virtual hosts.
+Use `services.laravel` to configure Laravel sites through the shared proxy.
+Set each site's domains and choose either a reverse proxy or PHP-FPM:
 
 ```nix
+# devenv.nix
 services.laravel = {
   enable = true;
   sharedProxy.sites = [
@@ -66,6 +71,12 @@ services.laravel = {
 };
 ```
 
-Each Laravel site uses exactly one of `proxy` or `phpFpm`; PHP-FPM sites also
-require `root`. For other Caddy directives, configure
-`services.sharedProxy.virtualHosts` directly.
+For each site, set exactly one of:
+
+- `proxy` for an application server address such as `127.0.0.1:3000`.
+- `phpFpm` for a PHP-FPM address. Also set `root` to the Laravel `public`
+  directory.
+
+`services.laravel` enables the shared proxy automatically. Use
+`services.sharedProxy.virtualHosts` directly when a site needs Caddy directives
+that are not covered by these Laravel options.
