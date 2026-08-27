@@ -8,6 +8,5 @@
 {
   imports = [
     ./shared-proxy
-    ./laravel
   ];
 }

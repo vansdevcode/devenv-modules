@@ -161,6 +161,8 @@ start_proxy_locked() {
   fi
   chmod 600 "$admin_socket"
   wait_until_running
+
+  "$caddy_bin" trust
 }
 
 reload_proxy_locked() {
