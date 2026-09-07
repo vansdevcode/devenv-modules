@@ -162,7 +162,7 @@ start_proxy_locked() {
   chmod 600 "$admin_socket"
   wait_until_running
 
-  "$caddy_bin" trust
+  "$caddy_bin" trust --address "unix//$admin_socket"
 }
 
 reload_proxy_locked() {

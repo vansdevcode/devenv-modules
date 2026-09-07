@@ -40,3 +40,5 @@ Caddy handlers.
 Hostnames are passed to Caddy unchanged; they do not need a `.localhost`
 suffix. The proxy uses Caddy's local CA for certificates. It uses ports 80 and
 443, so configure the application server on another port or a Unix socket.
+The management command keeps Caddy's admin API on a private Unix socket and
+uses that socket for startup trust installation, reloads, and shutdown.
