@@ -8,6 +8,15 @@
 let
   cfg = config.services.sharedProxy;
 
+  defaultStateDirectory =
+    let
+      home = builtins.getEnv "HOME";
+    in
+    if home == "" then
+      throw "services.sharedProxy.stateDirectory requires HOME during evaluation or an explicit value"
+    else
+      "${home}/.local/state/devenv-shared-caddy";
+
   vhostOptions = {
     options = {
       serverAliases = lib.mkOption {
@@ -33,10 +42,8 @@ let
 
   projectCaddyfile = lib.concatStringsSep "\n" (lib.mapAttrsToList vhostToConfig cfg.virtualHosts);
 
-  stateDirectoryPrelude = lib.optionalString (cfg.stateDirectory != null) ''
-    if [[ -z "''${DEVENV_SHARED_PROXY_STATE_DIR:-}" ]]; then
-      export DEVENV_SHARED_PROXY_STATE_DIR=${lib.escapeShellArg cfg.stateDirectory}
-    fi
+  stateDirectoryPrelude = ''
+    export DEVENV_SHARED_PROXY_STATE_DIR=${lib.escapeShellArg cfg.stateDirectory}
   '';
 
   defaultCliPackage = pkgs.writeShellApplication {
@@ -50,9 +57,7 @@ let
   };
 
   registrarCommand =
-    lib.optionalString (
-      cfg.stateDirectory != null
-    ) "DEVENV_SHARED_PROXY_STATE_DIR=${lib.escapeShellArg cfg.stateDirectory} "
+    "DEVENV_SHARED_PROXY_STATE_DIR=${lib.escapeShellArg cfg.stateDirectory} "
     + "printf %s ${lib.escapeShellArg projectCaddyfile} | "
     + "${cfg.cliPackage}/bin/shared-proxy registrar "
     + lib.escapeShellArg cfg.projectId;
@@ -81,12 +86,22 @@ in
     };
 
     stateDirectory = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
+      type = lib.types.str;
+      default = defaultStateDirectory;
+      defaultText = lib.literalExpression ''"$HOME/.local/state/devenv-shared-caddy"'';
+      description = "Shared persistent state directory.";
+    };
+
+    rootCA = lib.mkOption {
+      type = lib.types.str;
+      readOnly = true;
+      default = "${cfg.stateDirectory}/data/caddy/pki/authorities/local/root.crt";
+      defaultText = lib.literalExpression ''
+        "<stateDirectory>/data/caddy/pki/authorities/local/root.crt"
+      '';
       description = ''
-        Shared persistent state directory. Null uses
-        $XDG_STATE_HOME/devenv-shared-caddy, falling back to
-        $HOME/.local/state/devenv-shared-caddy.
+        Path to Caddy's local root CA certificate. The certificate is created
+        after the shared proxy starts.
       '';
     };
 
@@ -123,9 +138,8 @@ in
         message = "services.sharedProxy.projectId may contain only letters, numbers, dots, underscores, and hyphens.";
       }
       {
-        assertion =
-          cfg.stateDirectory == null || (cfg.stateDirectory != "" && lib.hasPrefix "/" cfg.stateDirectory);
-        message = "services.sharedProxy.stateDirectory must be an absolute path when set.";
+        assertion = cfg.stateDirectory != "" && lib.hasPrefix "/" cfg.stateDirectory;
+        message = "services.sharedProxy.stateDirectory must be an absolute path.";
       }
       {
         assertion = lib.all (name: name != "") configuredNames;
@@ -143,7 +157,7 @@ in
       shared-proxy = {
         exec = registrarCommand;
         restart.on = "never";
-       linux.capabilities = [ "net_bind_service" ];
+        linux.capabilities = [ "net_bind_service" ];
       };
     };
   };
