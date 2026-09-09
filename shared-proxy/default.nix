@@ -143,6 +143,7 @@ in
       shared-proxy = {
         exec = registrarCommand;
         restart.on = "never";
+       linux.capabilities = [ "net_bind_service" ];
       };
     };
   };
